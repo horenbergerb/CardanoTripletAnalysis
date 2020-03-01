@@ -4,6 +4,7 @@ import os
 from collections import OrderedDict
 from operator import itemgetter
 import sys
+from math import sqrt
 
 #logger to make debugging easier
 log = logging.getLogger(__name__)
@@ -27,13 +28,17 @@ def load_primes():
         if raw_input() != 'y':
             exit
         primes = OrderedDict([('2', 2), ('3', 3), ('5', 5)])
+        f = open('primes.txt', 'w+')
+        json.dump(primes, f)
     return primes
                             
 #returns the max value of the primes. NOTE: Not efficient; loads primes file.
-def get_max():
+def get_max(primes = None):
     log.info("Checking get_max of primes")
-    primes = load_primes()
-    max_val = max(primes.values())
+    if primes == None:
+        primes = load_primes()
+    log.info("Computing max value")
+    max_val = int(next(reversed(primes)))
     return max_val
 
 #adds primes between the current max prime and the threshold value to the file primes.txt
@@ -47,16 +52,22 @@ def find_primes(threshold):
     log.info("Calculating primes up to {}".format(threshold))
     cur_val = max(primes.values())
     log.info("Starting at value: {}".format(cur_val))
+
+    is_prime = [1]*(threshold+1)
+    for index, prime in primes.iteritems():
+        for jumps in range(2, (threshold/prime)+1):
+            is_prime[prime*jumps] = 0
+    #print(is_prime)
     while cur_val < threshold:
+        while cur_val <= threshold and is_prime[cur_val] == 0:
+              cur_val += 2
+        if cur_val > threshold:
+            break
+        for jumps in range(2, (threshold/cur_val)+1):
+            is_prime[cur_val*jumps] = 0
+        primes[str(cur_val)] = cur_val
         cur_val += 2
-        is_prime = True
-        for index, prime in primes.items():
-            if cur_val%prime == 0:
-                is_prime = False
-                break
-        if is_prime:
-            primes[str(cur_val)] = cur_val
-        
+
     json.dump(primes, f)
 
 def factorize(x, primes):
@@ -64,8 +75,8 @@ def factorize(x, primes):
     bound = (x/2)+1
     orig_val = x
     
-    for index, prime in primes.items():
-        if prime > bound:
+    for index, prime in primes.iteritems():
+        if prime > bound or x == 1:
             break
         while x%prime == 0:
             try:
@@ -80,4 +91,6 @@ def factorize(x, primes):
 #this file takes an argument for the threshold
 #i.e. python NumTheory.py 10000
 if len(sys.argv) > 1:
-    find_primes(sys.argv[1])
+    primes = load_primes()
+    find_primes(get_max(primes) + int(sys.argv[1]))
+    print(len(load_primes()))
