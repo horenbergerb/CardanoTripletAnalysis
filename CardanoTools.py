@@ -6,6 +6,7 @@ from collections import OrderedDict
 from operator import itemgetter
 from math import sqrt
 import itertools
+import copy
 
 #logger to make debugging easier
 log = logging.getLogger(__name__)
@@ -77,9 +78,22 @@ def get_max_n(cardano = None):
 #interesting to note: if you've factored some n, you could just tack on primes and have the factorizations for those too.
 #i.e. instead of iterating n from 1 to some limit, you could construct n from primes, and then you'd only have to factor (8n-3)
 #also note b=n is always a solution and seems to be the lowest value of a+b+c
-def brute_force_n_factors(n, primes):
-    #first factor n
-    n_square_factors = factorize(n, primes)
+def brute_force_n_factors(n, primes, prefactored_n = None):
+
+    n_square_factors = None
+    #we can re-use multiples of previously factored n values
+    #particularly, we re-use n*2
+    if prefactored_n != None:
+        n_square_factors = prefactored_n
+    else:
+        n_square_factors = factorize(n, primes)
+
+    n_double_factors = copy.deepcopy(n_square_factors)
+    try:
+        n_double_factors['2']['count'] += 1
+    except:
+        n_double_factors['2'] = {'value': 2, 'count': 1}
+    
     #our first term is n^2 so double the factors
     for key in n_square_factors:
         n_square_factors[key]['count'] = n_square_factors[key]['count']*2
@@ -88,7 +102,7 @@ def brute_force_n_factors(n, primes):
     term_2_factors = factorize(((8*n)-3), primes)
     
     #combining factors
-    total_factors = n_square_factors.copy()
+    total_factors = n_square_factors
     #combining is currently not graceful
     for key in term_2_factors.keys():
         try:
@@ -99,11 +113,12 @@ def brute_force_n_factors(n, primes):
     #finally, set the count on '1' back to '1'
     total_factors['1']['count'] = 1
 
-    print("n: {} (n^2)(8*n-3): {}".format(n, (n*n)*((8*n)-3)))
-    log.debug("n: {} (n^2)(8*n-3): {}".format(n, (n*n)*((8*n)-3)))
+    if n%10000 == 0:
+        print("n: {}".format(n))#, (n*n)*((8*n)-3)))
+    #log.debug("n: {} (n^2)(8*n-3): {}".format(n, (n*n)*((8*n)-3)))
     #log.debug("yielded: {}".format(total_factors))
-
-    return total_factors
+    
+    return total_factors, n_double_factors, term_2_factors
 
 #depricated. counting will not be useful until we can count solutions which satisfy the limit a+b+c<N and we have not solved this.
 '''
@@ -152,8 +167,8 @@ def solve_solutions_for_n(n, cur_factors, limit = None):
         x = 0
         while x < len(b_solutions):
             if ((3*n-1) + b_solutions[x] + (left_side/(b_solutions[x]*b_solutions[x]))) > limit:
-                print("Soln over limit:")
-                print(b_solutions[x])
+                #print("Soln over limit:")
+                #print(b_solutions[x])
                 b_solutions.pop(x)
             else:
                 x+=1
@@ -192,32 +207,55 @@ def brute_force_count_range(max_n, primes, save_results = False, limit=None):
         #add_cardano_soln(x, sol_count, cur_factors)
 '''
 
-#count cardano solutions in a very bland way, using brue_force_n_factors
+#count cardano solutions in a very bland way, using brute_force_n_factors
 def brute_force_solve_range(max_n, primes, limit=None ,save_results = False):
-    cardano = load_cardano()
-    start_val = get_max_n(cardano = cardano)
+    #cardano = load_cardano()
+    #start_val = get_max_n(cardano = cardano)
+    start_val = 1
+    
     total_sols = 0
+
+    zero_count = 0
     
     log.info("Counting cardano solutions from {} to {}".format(start_val, max_n))
     #calculating new n values (x is n)
     max_prime = get_max(primes)
-    
+    #we hold on to the factors of (8n-3) and reuse them 
+    term_2_factors = []
+    #for every n we factor, we hold on to the factorization of 2n and reuse it
+    prev_2n_factors = []
     for x in range(start_val, max_n):
         
         #factoring the left-hand side of the eq
-        cur_factors = brute_force_n_factors(x, primes)
+        #if we've already factored this n as a previous (8n-3), reuse it
+        short_cut = None
+        if x%2 == 0:
+            short_cut = prev_2n_factors.pop(0)
+            #print("n value: {} hacked factors: {}".format(x, short_cut))
+        elif x%8 == 5:
+            short_cut = term_2_factors.pop(0)
+        cur_factors, new_2n_factors, new_2nd_term_factors = brute_force_n_factors(x, primes, prefactored_n = short_cut)
+        prev_2n_factors.append(new_2n_factors)
+        term_2_factors.append(new_2nd_term_factors)
+        
         #getting all possible solutions of (b^2)(c) using the factorization
-        print(cur_factors)
+        #print(cur_factors)
         sols = solve_solutions_for_n(x, cur_factors, limit=limit)
-        print(sols)
-        total_sols += len(sols)
+        #print(sols)
+        if len(sols) == 0:
+            zero_count += 1
+        else:
+            total_sols += len(sols)
+            zero_count = 0
+        '''
         if len(sols) == 0:
             log.info("Hit boundary; no solutions at n={} and limit={}".format(x, limit))
             break
-        if (x*x)*((8*x)-3)/2 > max_prime:
+        '''
+        if ((8*x)-3)/2 > max_prime:
             log.error("Desired Cardano values larger than available primes :( Terminating...")
             break
-    print(total_sols)
-        #add_cardano_soln(x, sol_count, cur_factors)
+    print("Total solutions: {}".format(total_sols))
+    print("Consecutive Zeros: {}".format(zero_count))
 
     
